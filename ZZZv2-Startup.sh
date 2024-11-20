@@ -10,70 +10,87 @@ fi
 # Script Config Section
 ########################
 
-# Function to get the primary IP address (prioritizing Ethernet)
-get_primary_ip() {
-  local primary_ip=""
-  
-  # Try to get the Ethernet IP first
-  primary_ip=$(ip addr show eth0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
-  
-  # If no Ethernet IP, try WiFi
-  if [ -z "$primary_ip" ]; then
-    primary_ip=$(ip addr show wlan0 2>/dev/null | grep 'inet ' | awk '{print $2}' | cut -d'/' -f1)
-  fi
-  
-  echo "$primary_ip"
+# Function to list active network interfaces and let the user choose
+get_active_network_interfaces() {
+  ip -o addr show up | awk '/inet/ {print $2, $4}' | while read -r iface ip; do
+    echo "$iface ($ip)"
+  done
 }
 
-# Check if the current IP is statically configured
+# Function to get the IP of a given network interface
+get_interface_ip() {
+  local iface=$1
+  ip -o -4 addr show "$iface" | awk '{print $4}' | cut -d'/' -f1
+}
+
+# Function to determine if the interface uses static IP configuration
 detect_static_ip() {
   local iface=$1
-  grep -q "iface $iface inet static" /etc/network/interfaces 2>/dev/null
+  if grep -q "iface $iface inet static" /etc/network/interfaces 2>/dev/null; then
+    echo "Static"
+  elif grep -q "$iface.*dhcp" /etc/NetworkManager/system-connections/* 2>/dev/null; then
+    echo "DHCP"
+  else
+    echo "Unknown"
+  fi
 }
 
-# Function to validate and set ServIP
-validate_and_set_ip() {
-  # Get primary network interface (prefer Ethernet, fallback to WiFi)
-  primary_iface=""
-  if ip link show eth0 &>/dev/null; then
-    primary_iface="eth0"
-  elif ip link show wlan0 &>/dev/null; then
-    primary_iface="wlan0"
+# Main function to detect network adapter and handle IP configuration
+network_setup() {
+  local active_adapters
+  local chosen_adapter
+  local adapter_count
+
+  # Get a list of active network interfaces
+  active_adapters=($(get_active_network_interfaces))
+  adapter_count=${#active_adapters[@]}
+
+  if [ "$adapter_count" -eq 0 ]; then
+    echo "No active network interfaces found." >&2
+    exit 1
+  elif [ "$adapter_count" -eq 1 ]; then
+    # Only one active interface
+    chosen_adapter=$(echo "${active_adapters[0]}" | awk '{print $1}')
   else
-    echo "No suitable network interface found." >&2
+    # Multiple active interfaces
+    echo "Multiple active network interfaces found:"
+    select iface in "${active_adapters[@]}"; do
+      if [ -n "$iface" ]; then
+        chosen_adapter=$(echo "$iface" | awk '{print $1}')
+        break
+      else
+        echo "Invalid selection. Please try again."
+      fi
+    done
+  fi
+
+  # Get the IP address of the chosen interface
+  ServerIP=$(get_interface_ip "$chosen_adapter")
+
+  if [ -z "$ServerIP" ]; then
+    echo "Unable to determine the IP address for $chosen_adapter." >&2
     exit 1
   fi
 
-  # Check if the IP is statically configured
-  if detect_static_ip "$primary_iface"; then
-    ServIP=$(get_primary_ip)
-    echo "Static IP detected: $ServIP"
-  else
-    # Get current IP address (DHCP assigned)
-    current_ip=$(get_primary_ip)
-    if [ -z "$current_ip" ]; then
-      echo "No IP address assigned to $primary_iface." >&2
+  # Detect if the IP is statically configured
+  ip_config_type=$(detect_static_ip "$chosen_adapter")
+  case "$ip_config_type" in
+    "Static")
+      echo "Manual IP configuration found. Assuming this address to be static."
+      ;;
+    "DHCP")
+      echo "DHCP assigned IP found. Assuming a static route is set on the network routing device."
+      ;;
+    "Unknown")
+      echo "Network adapter state could not be determined. Check your configuration and try again." >&2
       exit 1
-    fi
-    
-    # Prompt the user for confirmation
-    echo "Current IP address (DHCP assigned) is: $current_ip"
-    echo -n "Do you want to proceed with this IP as ServIP? [Y/n] (default is Y): "
-    read -t 10 user_response
-    user_response=${user_response:-Y}
+      ;;
+  esac
 
-    # Handle user response
-    if [[ "$user_response" =~ ^([nN])$ ]]; then
-      echo "Aborting IP configuration." >&2
-      exit 1
-    else
-      ServIP="$current_ip"
-    fi
-  fi
-
-  # ServIP is now set and can be used for later configuration tasks
-  echo "ServIP has been set to: $ServIP"
+  # Output the chosen IP for future use
+  echo "ServerIP has been set to: $ServerIP"
 }
+
 
 ########################
 # Fresh OS Prep Section
@@ -162,8 +179,8 @@ EOF
 # Main Script Execution
 ########################
 
-echo "Running Script Config..."
-validate_and_set_ip
+echo "Running Network Setup..."
+network_setup
 
 echo "Running Fresh OS Prep..."
 fresh_os_prep

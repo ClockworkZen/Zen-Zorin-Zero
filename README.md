@@ -88,6 +88,22 @@ NextCloud is a private cloud storage solution that lets you store, access, and s
 
 Please check out each tool's original website to learn more about them!
 
+## How to use ZZZ (script form)
+
+How to Run the Script, in terminal
+1.	Save the script from GitHub, using your browser or Git solution of choice. This can be saved and run anywhere executable scripts can exist on your install.
+2.  Open the Terminal to where your script is saved. Assuming you're using the Zorin OS GUI, you can right click "Open in Terminal" to launch an instance of Terminal set to the current folder's path.
+3.	Make the script executable:
+```
+chmod +x install_apps.sh
+```
+3.	Run the script, with superuser permissions:
+```
+sudo ./install_apps.sh
+```
+
+
+
 
 ## First Run Commands & Interface URLs
 

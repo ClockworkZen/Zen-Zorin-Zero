@@ -95,14 +95,12 @@ How to Run the Script, in terminal
 2.  Open the Terminal to where your script is saved. Assuming you're using the Zorin OS GUI, you can right click "Open in Terminal" to launch an instance of Terminal set to the current folder's path.
 3.	Make the script executable:
 ```
-chmod +x install_apps.sh
+chmod +x ZZZ-AutoInstaller.sh
 ```
 4.	Run the script, with superuser permissions:
 ```
-sudo ./install_apps.sh
+sudo ./ZZZ-AutoInstaller.sh
 ```
-
-
 
 
 ## First Run Commands & Interface URLs

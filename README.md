@@ -97,7 +97,7 @@ How to Run the Script, in terminal
 ```
 chmod +x install_apps.sh
 ```
-3.	Run the script, with superuser permissions:
+4.	Run the script, with superuser permissions:
 ```
 sudo ./install_apps.sh
 ```

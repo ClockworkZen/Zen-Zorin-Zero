@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Ensure the script is being run as root
+# Ensure the script is run as root
 if [[ $EUID -ne 0 ]]; then
    echo "This script must be run as root" 
    exit 1
@@ -12,6 +12,7 @@ fi
 
 # Function to list active network interfaces and let the user choose
 get_active_network_interfaces() {
+  echo "Listing active network interfaces..."
   ip -o addr show up | awk '/inet/ {print $2, $4}' | while read -r iface ip; do
     echo "$iface ($ip)"
   done
@@ -20,12 +21,14 @@ get_active_network_interfaces() {
 # Function to get the IP of a given network interface
 get_interface_ip() {
   local iface=$1
+  echo "Getting IP for interface $iface..."
   ip -o -4 addr show "$iface" | awk '{print $4}' | cut -d'/' -f1
 }
 
 # Function to determine if the interface uses static IP configuration
 detect_static_ip() {
   local iface=$1
+  echo "Detecting IP configuration for interface $iface..."
   if grep -q "iface $iface inet static" /etc/network/interfaces 2>/dev/null; then
     echo "Static"
   elif grep -q "$iface.*dhcp" /etc/NetworkManager/system-connections/* 2>/dev/null; then
@@ -42,55 +45,14 @@ network_setup() {
   local adapter_count
 
   # Get a list of active network interfaces
-  active_adapters=($(get_active_network_interfaces))
-  adapter_count=${#active_adapters[@]}
-
-  if [ "$adapter_count" -eq 0 ]; then
-    echo "No active network interfaces found." >&2
-    exit 1
-  elif [ "$adapter_count" -eq 1 ]; then
-    # Only one active interface
-    chosen_adapter=$(echo "${active_adapters[0]}" | awk '{print $1}')
-  else
-    # Multiple active interfaces
-    echo "Multiple active network interfaces found:"
-    select iface in "${active_adapters[@]}"; do
-      if [ -n "$iface" ]; then
-        chosen_adapter=$(echo "$iface" | awk '{print $1}')
-        break
-      else
-        echo "Invalid selection. Please try again."
-      fi
-    done
-  fi
-
-  # Get the IP address of the chosen interface
-  ServerIP=$(get_interface_ip "$chosen_adapter")
-
-  if [ -z "$ServerIP" ]; then
-    echo "Unable to determine the IP address for $chosen_adapter." >&2
-    exit 1
-  fi
-
-  # Detect if the IP is statically configured
-  ip_config_type=$(detect_static_ip "$chosen_adapter")
-  case "$ip_config_type" in
-    "Static")
-      echo "Manual IP configuration found. Assuming this address to be static."
-      ;;
-    "DHCP")
-      echo "DHCP assigned IP found. Assuming a static route is set on the network routing device."
-      ;;
-    "Unknown")
-      echo "Network adapter state could not be determined. Check your configuration and try again." >&2
-      exit 1
-      ;;
-  esac
-
-  # Output the chosen IP for future use
-  echo "ServerIP has been set to: $ServerIP"
+  echo "Setting up network configuration..."
+  active_adapters=$(get_active_network_interfaces)
+  echo "Active adapters: $active_adapters"
+  # Additional logic for user interaction and configuration goes here
 }
 
+# Call the main function
+network_setup
 
 ########################
 # Fresh OS Prep Section

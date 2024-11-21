@@ -1,26 +1,19 @@
 #!/bin/bash
 
-# Function to list active network interfaces and let the user choose
+# Function to get all active network interfaces excluding loopback and non-IPv4 addresses
 get_active_network_interfaces() {
-  echo "Listing active network interfaces..."
-  ip -o addr show up | awk '/inet/ {print $2, $4}' | while read -r iface ip; do
-    if [[ "$iface" != "lo" ]]; then
-      echo "$iface ($ip)"
-    fi
-  done
+  ip -o -4 addr show | awk '{print $2}' | grep -v '^lo$' | sort -u
 }
 
 # Function to get the IP of a given network interface
 get_interface_ip() {
   local iface=$1
-  echo "Getting IP for interface $iface..."
   ip -o -4 addr show "$iface" | awk '{print $4}' | cut -d'/' -f1
 }
 
 # Function to determine if the interface uses static IP configuration
 detect_static_ip() {
   local iface=$1
-  echo "Detecting IP configuration for interface $iface..."
   if grep -q "iface $iface inet static" /etc/network/interfaces 2>/dev/null; then
     echo "Static"
   elif grep -q "$iface.*dhcp" /etc/NetworkManager/system-connections/* 2>/dev/null; then
@@ -38,31 +31,41 @@ network_setup() {
   local ServerIP
   local current_hostname
   local new_hostname
+  local DHCP_On
 
   echo "Setting up network configuration..."
   active_adapters=$(get_active_network_interfaces)
-  echo "Active adapters: $active_adapters"
+  adapter_count=$(echo "$active_adapters" | wc -l)
 
-  echo "Please choose a network adapter from the list above:"
-  read -r chosen_adapter
-
-  ServerIP=$(get_interface_ip "$chosen_adapter")
-
-  current_hostname=$(hostname)
-  echo "Current hostname is $current_hostname. Press Enter to keep it or 'N' to set a new hostname (10 seconds to auto-confirm):"
-  read -t 10 -n 1 -r user_input
-
-  if [[ $user_input == "N" || $user_input == "n" ]]; then
-    echo "Enter new hostname:"
-    read -r new_hostname
-    hostnamectl set-hostname "$new_hostname"
-    hostname=$new_hostname
+  if [ "$adapter_count" -eq 0 ]; then
+    echo "No active network interfaces found."
+    exit 1
+  elif [ "$adapter_count" -eq 1 ]; then
+    chosen_adapter=$(echo "$active_adapters")
   else
-    hostname=$current_hostname
+    echo "Active adapters:"
+    echo "$active_adapters" | nl -w 2 -s '. '
+    echo "Please choose a network adapter by number:"
+    read -r adapter_number
+    chosen_adapter=$(echo "$active_adapters" | sed -n "${adapter_number}p")
   fi
 
-  echo "Configuration will use $ServerIP for program setup where applicable"
-  echo "Hostname is set to $hostname"
+  echo "Chosen adapter: $chosen_adapter"
+  ServerIP=$(get_interface_ip "$chosen_adapter")
+  echo "IP Address: $ServerIP"
+
+  ip_config=$(detect_static_ip "$chosen_adapter")
+  if [ "$ip_config" = "DHCP" ]; then
+    DHCP_On=true
+  else
+    DHCP_On=false
+  fi
+
+  if [ "$DHCP_On" = true ]; then
+    echo "Warning: The chosen adapter is set to DHCP mode."
+  else
+    echo "Warning: The chosen adapter is set to Static IP mode."
+  fi
 }
 
 network_setup

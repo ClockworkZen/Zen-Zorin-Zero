@@ -1,5 +1,50 @@
 #!/bin/bash
 
+# Function to check if IPv6 is enabled
+check_ipv6_enabled() {
+    if [[ $(sysctl net.ipv6.conf.all.disable_ipv6 | awk '{print $3}') -eq 0 ]]; then
+        return 0  # IPv6 is enabled
+    else
+        return 1  # IPv6 is disabled
+    fi
+}
+
+# Function to disable IPv6
+disable_ipv6() {
+    sysctl -w net.ipv6.conf.all.disable_ipv6=1
+    sysctl -w net.ipv6.conf.default.disable_ipv6=1
+    if [[ $? -eq 0 ]]; then
+        echo "IPv6 disabled on system level"
+    else
+        echo "Error disabling IPv6"
+        exit 1
+    fi
+}
+
+# Function to prompt user to disable IPv6
+IPv6_Disable() {
+    if check_ipv6_enabled; then
+        echo "This tool has been optimized for an IPv4 only network, as my current ISP doesn't support IPv6."
+        echo "I recommend disabling IPv6 on the server level to harden security."
+        echo "You may choose to disable this now by typing Y, or you can skip this step and risk configuration issues later on."
+        
+        # Prompt user for input with a timeout
+        read -t 10 -p "Press Y to disable IPv6 or N to skip (auto-accepting Y in 10 seconds): " user_input
+        
+        # Default to 'Y' if no input is given
+        user_input=${user_input:-Y}
+        user_input=$(echo "$user_input" | tr '[:lower:]' '[:upper:]')  # Convert to uppercase
+
+        if [[ "$user_input" == "Y" ]]; then
+            disable_ipv6
+        else
+            echo "Skipping IPv6 disable step."
+        fi
+    else
+        echo "IPv6 is already disabled on the system."
+    fi
+}
+
 # Function to get all active network interfaces excluding loopback and non-IPv4 addresses
 get_active_network_interfaces() {
   ip -o -4 addr show | awk '{print $2}' | grep -v '^lo$' | sort -u
@@ -36,6 +81,7 @@ detect_static_ip() {
 
 # Main function to detect network adapter and handle IP configuration
 network_setup() {
+  local IPv6_Disable
   local active_adapters
   local chosen_adapter
   local adapter_count

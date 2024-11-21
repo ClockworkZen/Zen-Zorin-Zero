@@ -14,14 +14,25 @@ get_interface_ip() {
 # Function to determine if the interface uses static IP configuration
 detect_static_ip() {
   local iface=$1
+
+  # Check if the interface is configured as static in /etc/network/interfaces
   if grep -q "iface $iface inet static" /etc/network/interfaces 2>/dev/null; then
     echo "Static"
-  elif grep -q "$iface.*dhcp" /etc/NetworkManager/system-connections/* 2>/dev/null; then
-    echo "DHCP"
-  else
-    echo "Unknown"
+    return
   fi
+
+  # Check if the interface is configured with DHCP in NetworkManager connections
+  if grep -q "interface-name=$iface" /etc/NetworkManager/system-connections/* 2>/dev/null; then
+    if grep -q "dhcp" /etc/NetworkManager/system-connections/* 2>/dev/null; then
+      echo "DHCP"
+      return
+    fi
+  fi
+
+  # If neither static nor DHCP is found, return Unknown
+  echo "Unknown"
 }
+
 
 # Main function to detect network adapter and handle IP configuration
 network_setup() {
